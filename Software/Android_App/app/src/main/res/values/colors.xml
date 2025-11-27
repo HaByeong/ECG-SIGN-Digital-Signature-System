@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Primary Colors - Deep Blue/Teal Medical Theme -->
-    <color name="primary">#1A73E8</color>
-    <color name="primary_dark">#0D47A1</color>
-    <color name="primary_light">#4FC3F7</color>
+    <!-- Primary Colors - Modern Medical Theme -->
+    <color name="primary">#6366F1</color>
+    <color name="primary_dark">#4F46E5</color>
+    <color name="primary_light">#818CF8</color>
     
     <!-- Accent Colors -->
-    <color name="accent">#00BFA5</color>
-    <color name="accent_light">#64FFDA</color>
+    <color name="accent">#06B6D4</color>
+    <color name="accent_light">#22D3EE</color>
     
     <!-- Background Colors -->
-    <color name="background_dark">#0A1628</color>
+    <color name="background_dark">#0F172A</color>
     <color name="background_card">#1E293B</color>
     <color name="background_card_light">#334155</color>
+    <color name="background_card_elevated">#273549</color>
     
     <!-- Text Colors -->
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#94A3B8</color>
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#CBD5E1</color>
     <color name="text_hint">#64748B</color>
     
     <!-- Status Colors -->
@@ -24,22 +25,35 @@
     <color name="success_light">#34D399</color>
     <color name="warning">#F59E0B</color>
     <color name="error">#EF4444</color>
+    <color name="error_light">#F87171</color>
     <color name="info">#3B82F6</color>
     
     <!-- ECG Graph Colors -->
-    <color name="ecg_line">#00E5FF</color>
+    <color name="ecg_line">#22D3EE</color>
     <color name="ecg_grid">#1E3A5F</color>
+    <color name="ecg_background">#0F172A</color>
+    <color name="ecg_line_bright">#06B6D4</color>
     
     <!-- Button Colors -->
-    <color name="button_primary">#1A73E8</color>
+    <color name="button_primary">#6366F1</color>
+    <color name="button_primary_pressed">#4F46E5</color>
     <color name="button_secondary">#334155</color>
+    <color name="button_secondary_pressed">#475569</color>
     <color name="button_success">#10B981</color>
+    <color name="button_success_pressed">#059669</color>
     <color name="button_danger">#EF4444</color>
+    <color name="button_danger_pressed">#DC2626</color>
     <color name="button_disabled">#475569</color>
     
     <!-- Gradient Colors -->
-    <color name="gradient_start">#1A73E8</color>
-    <color name="gradient_end">#00BFA5</color>
+    <color name="gradient_start">#6366F1</color>
+    <color name="gradient_mid">#8B5CF6</color>
+    <color name="gradient_end">#06B6D4</color>
+    
+    <!-- Shadow Colors -->
+    <color name="shadow_light">#40000000</color>
+    <color name="shadow_medium">#60000000</color>
+    <color name="shadow_dark">#80000000</color>
     
     <!-- Legacy colors (테마 호환용) -->
     <color name="black">#FF000000</color>

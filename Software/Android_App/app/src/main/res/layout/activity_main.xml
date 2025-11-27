@@ -16,19 +16,37 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@drawable/header_background"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+            android:padding="20dp"
+            android:layout_marginBottom="24dp"
+            android:elevation="6dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="🫀 ECG Sign"
-                android:textColor="@color/text_primary"
-                android:textSize="28sp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-medium" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🫀 ECG Sign"
+                    android:textColor="@color/text_primary"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.02" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="디지털 서명 인증 시스템"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/connectionBadge"
@@ -37,7 +55,12 @@
                 android:background="@drawable/status_badge_disconnected"
                 android:text="● 연결 안됨"
                 android:textColor="@color/text_primary"
-                android:textSize="12sp" />
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
         </LinearLayout>
 
         <!-- 상태 카드 -->
@@ -46,26 +69,42 @@
             android:layout_height="wrap_content"
             android:background="@drawable/card_background"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
+            android:padding="20dp"
+            android:layout_marginBottom="20dp"
+            android:elevation="4dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="시스템 상태"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:textAllCaps="true"
-                android:letterSpacing="0.1" />
-
-            <TextView
-                android:id="@+id/statusTextView"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="앱 시작됨"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="16dp"
+                    android:background="@color/accent"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="시스템 상태"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.15" />
+            </LinearLayout>
+
+    <TextView
+        android:id="@+id/statusTextView"
+                android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+        android:text="앱 시작됨"
                 android:textColor="@color/text_primary"
-                android:textSize="16sp" />
+                android:textSize="17sp"
+                android:letterSpacing="0.01" />
         </LinearLayout>
 
         <!-- 연결 버튼 섹션 -->
@@ -75,16 +114,17 @@
             android:orientation="horizontal"
             android:layout_marginBottom="16dp">
 
-            <Button
-                android:id="@+id/scanButton"
+    <Button
+        android:id="@+id/scanButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="60dp"
                 android:layout_weight="1"
                 android:background="@drawable/button_secondary"
                 android:text="📶 블루투스"
                 android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:textAllCaps="false" />
+                android:textSize="15sp"
+                android:textAllCaps="false"
+                android:elevation="2dp" />
 
             <View
                 android:layout_width="12dp"
@@ -93,43 +133,60 @@
             <Button
                 android:id="@+id/serverButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="60dp"
                 android:layout_weight="1"
                 android:background="@drawable/button_primary"
                 android:text="🌐 서버 연결"
                 android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:textAllCaps="false" />
+                android:textSize="15sp"
+                android:textAllCaps="false"
+                android:elevation="2dp" />
         </LinearLayout>
 
         <!-- 테스트 모드 -->
         <Button
             android:id="@+id/dummyDataButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginBottom="16dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="20dp"
             android:background="@drawable/button_secondary"
             android:text="🧪 더미 ECG 데이터 생성 (테스트용)"
             android:textColor="@color/text_primary"
-            android:textSize="13sp"
-            android:textAllCaps="false" />
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:elevation="2dp" />
 
         <!-- 인증 카드 -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
             android:background="@drawable/card_background"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
+            android:padding="20dp"
+            android:layout_marginBottom="20dp"
+            android:elevation="4dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🔐 ECG 인증"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/primary"
+                    android:layout_marginEnd="10dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔐 ECG 인증"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.01" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/authStatusTextView"
@@ -162,11 +219,11 @@
                     android:id="@+id/progressBar"
                     style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="match_parent"
-                    android:layout_height="8dp"
-                    android:layout_marginTop="8dp"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="10dp"
                     android:max="100"
                     android:progress="0"
-                    android:progressTint="@color/accent" />
+                    android:progressDrawable="@drawable/progress_bar_drawable" />
 
                 <TextView
                     android:id="@+id/progressStatusTextView"
@@ -182,7 +239,7 @@
             <EditText
                 android:id="@+id/userIdEditText"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="56dp"
                 android:layout_marginTop="16dp"
                 android:background="@drawable/edit_text_background"
                 android:hint="사용자 ID 입력"
@@ -190,9 +247,10 @@
                 android:textColor="@color/text_primary"
                 android:inputType="text"
                 android:maxLines="1"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:textSize="16sp" />
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:textSize="16sp"
+                android:elevation="1dp" />
 
             <!-- 인증 버튼들 -->
             <LinearLayout
@@ -204,46 +262,52 @@
                 <Button
                     android:id="@+id/registerButton"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
                     android:background="@drawable/button_success"
                     android:text="등록"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
                     android:textAllCaps="false"
-                    android:enabled="false" />
+                    android:enabled="false"
+                    android:elevation="2dp" />
 
                 <View
-                    android:layout_width="8dp"
+                    android:layout_width="10dp"
                     android:layout_height="0dp" />
 
                 <Button
                     android:id="@+id/loginButton"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
                     android:background="@drawable/button_primary"
                     android:text="로그인"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
                     android:textAllCaps="false"
-                    android:enabled="false" />
+                    android:enabled="false"
+                    android:elevation="2dp" />
 
                 <View
-                    android:layout_width="8dp"
+                    android:layout_width="10dp"
                     android:layout_height="0dp" />
 
                 <Button
                     android:id="@+id/logoutButton"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
                     android:background="@drawable/button_danger"
                     android:text="로그아웃"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
                     android:textAllCaps="false"
-                    android:enabled="false" />
+                    android:enabled="false"
+                    android:elevation="2dp" />
             </LinearLayout>
 
             <!-- 사용자 관리 버튼 -->
@@ -256,30 +320,32 @@
                 <Button
                     android:id="@+id/listUsersButton"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
                     android:background="@drawable/button_secondary"
                     android:text="👥 사용자 목록"
                     android:textColor="@color/text_primary"
-                    android:textSize="12sp"
+                    android:textSize="13sp"
                     android:textAllCaps="false"
-                    android:enabled="false" />
+                    android:enabled="false"
+                    android:elevation="1dp" />
 
                 <View
-                    android:layout_width="8dp"
+                    android:layout_width="10dp"
                     android:layout_height="0dp" />
 
                 <Button
                     android:id="@+id/deleteUserButton"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
                     android:background="@drawable/button_danger"
                     android:text="🗑️ 사용자 삭제"
                     android:textColor="@color/text_primary"
-                    android:textSize="12sp"
+                    android:textSize="13sp"
                     android:textAllCaps="false"
-                    android:enabled="false" />
+                    android:enabled="false"
+                    android:elevation="1dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -289,8 +355,9 @@
             android:layout_height="wrap_content"
             android:background="@drawable/card_background"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
+            android:padding="20dp"
+            android:layout_marginBottom="20dp"
+            android:elevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -298,23 +365,37 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="📊 ECG 실시간"
-                    android:textColor="@color/text_primary"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/ecgValueTextView"
+                    <View
+                        android:layout_width="4dp"
+                        android:layout_height="20dp"
+                        android:background="@color/ecg_line"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📊 ECG 실시간"
+                        android:textColor="@color/text_primary"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.01" />
+                </LinearLayout>
+
+    <TextView
+        android:id="@+id/ecgValueTextView"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+        android:layout_height="wrap_content"
                     android:text="--- mV"
                     android:textColor="@color/ecg_line"
-                    android:textSize="24sp"
-                    android:textStyle="bold"
+        android:textSize="24sp"
+        android:textStyle="bold"
                     android:fontFamily="monospace" />
             </LinearLayout>
 
@@ -322,10 +403,11 @@
             <com.github.mikephil.charting.charts.LineChart
                 android:id="@+id/ecgChart"
                 android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:layout_marginTop="12dp"
+                android:layout_height="220dp"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/ecg_chart_background"
-                android:padding="8dp" />
+                android:padding="12dp"
+                android:elevation="2dp" />
         </LinearLayout>
 
         <!-- 서버 응답 카드 -->
@@ -334,31 +416,46 @@
             android:layout_height="wrap_content"
             android:background="@drawable/card_background"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="20dp"
+            android:elevation="4dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📨 서버 응답"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <View
+                    android:layout_width="4dp"
+                    android:layout_height="20dp"
+                    android:background="@color/info"
+                    android:layout_marginEnd="10dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📨 서버 응답"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.01" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/resultTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="16dp"
                 android:text="서버 응답 대기 중..."
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp"
-                android:lineSpacingExtra="4dp" />
+                android:lineSpacingExtra="6dp" />
         </LinearLayout>
 
         <!-- 하단 여백 -->
         <View
-            android:layout_width="match_parent"
+        android:layout_width="match_parent"
             android:layout_height="20dp" />
 
-    </LinearLayout>
+</LinearLayout>
 </ScrollView>

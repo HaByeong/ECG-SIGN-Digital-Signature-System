@@ -57,7 +57,7 @@ import org.json.JSONObject;
 public class MainActivity extends AppCompatActivity {
 
     private TcpClientSender tcpSender;
-    private final String PYTHON_SERVER_IP = "192.168.219.59";  // TODO: 서버 실행 시 출력되는 IP로 변경 필요
+    private final String PYTHON_SERVER_IP = "192.168.219.182";  // TODO: 서버 실행 시 출력되는 IP로 변경 필요
     private final int PYTHON_SERVER_PORT = 9999;
 
     private static final String TAG = "ECG_APP_CLASSIC";
@@ -132,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
         // LineChart 객체 초기화
         ecgChart = findViewById(R.id.ecgChart);
         initChart();
-        
+
         // 초기 연결 상태 배지
         updateConnectionBadge();
 
@@ -863,7 +863,7 @@ public class MainActivity extends AppCompatActivity {
         ecgChart.getDescription().setEnabled(false);
         ecgChart.setTouchEnabled(false);
         ecgChart.getLegend().setEnabled(false);
-        
+
         // 배경 투명
         ecgChart.setBackgroundColor(0x00000000);
 
@@ -1364,7 +1364,7 @@ public class MainActivity extends AppCompatActivity {
                     // 서버에서 생성된 서명 또는 특징 벡터를 추출
                     String signatureHash = json.optString("signature_hash", "");
                     double qualityScore = json.optDouble("quality_score", 0);
-                    
+
                     // 요약 정보 가져오기
                     JSONObject summary = json.optJSONObject("summary");
                     double heartRate = summary != null ? summary.optDouble("heart_rate", 0) : 0;
