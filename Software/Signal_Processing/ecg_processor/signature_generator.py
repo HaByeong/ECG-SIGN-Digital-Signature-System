@@ -18,6 +18,7 @@ class SignatureGenerator:
     def __init__(self):
         """초기화"""
         # 특징 가중치 (중요도에 따른 가중치)
+        # TODO: 실제 데이터로 최적 가중치 찾아보기
         self.feature_weights = {
             'morphological': 1.5,  # 형태학적 특징 (가장 중요)
             'hrv': 1.0,            # HRV 특징
@@ -25,7 +26,7 @@ class SignatureGenerator:
             'statistical': 0.7    # 통계적 특징
         }
         
-        # 이산화 비트 수
+        # 이산화 비트 수 (8비트 = 0-255)
         self.discretization_bits = 8
         
     def generate_signature(self, features: Dict) -> Dict:

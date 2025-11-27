@@ -40,7 +40,7 @@ HOST = '0.0.0.0'  # 모든 네트워크 인터페이스에서 수신
 PORT = 9999       # Android 앱의 PYTHON_SERVER_PORT와 동일해야 함
 BUFFER_SIZE = 10000  # 처리할 ECG 샘플 개수 (20초 분량, 500Hz 기준)
 SAMPLING_RATE = 500  # 샘플링 주파수 (Hz) - 아두이노 설정과 일치해야 함
-SIMILARITY_THRESHOLD = 0.75  # ECG 인증 유사도 임계값 (0-1)
+SIMILARITY_THRESHOLD = 0.75  # ECG 인증 유사도 임계값 (0-1) - TODO: 실제 데이터로 최적값 찾기
 # ==============================
 
 
