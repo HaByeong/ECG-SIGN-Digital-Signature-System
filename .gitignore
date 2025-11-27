@@ -32,3 +32,39 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Python - ECG Processor
+Software/Signal_Processing/ecg_processor/__pycache__/
+Software/Signal_Processing/*.pyc
+
+# User Data (민감한 정보)
+Software/Signal_Processing/user_data/users.json
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
