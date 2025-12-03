@@ -88,6 +88,9 @@ public class MainActivity extends AppCompatActivity {
     private LineDataSet dataSet;
     private int dataIndex = 0;
     private static final int MAX_DATA_POINTS = 500;
+    // ECG 신호 스무딩을 위한 이동 평균 필터
+    private final List<Float> smoothingBuffer = new ArrayList<>();
+    private static final int SMOOTHING_WINDOW = 5; // 5개 샘플 이동 평균
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothSocket bluetoothSocket;
     private BluetoothDevice targetDevice;
@@ -944,10 +947,26 @@ public class MainActivity extends AppCompatActivity {
         ecgChart.invalidate();
     }
 
-    //데이터 추가 및 그래프 갱신 메서드
+    //데이터 추가 및 그래프 갱신 메서드 (스무딩 적용)
     private void addEntry(int value) {
-        //(X축: dataIndex, Y축: value)
-        Entry newEntry = new Entry(dataIndex, value);
+        // 이동 평균 필터로 스무딩 적용 (노이즈 제거)
+        smoothingBuffer.add((float) value);
+        if (smoothingBuffer.size() > SMOOTHING_WINDOW) {
+            smoothingBuffer.remove(0);
+        }
+        
+        // 이동 평균 계산
+        float smoothedValue = value;
+        if (smoothingBuffer.size() >= SMOOTHING_WINDOW) {
+            float sum = 0;
+            for (float v : smoothingBuffer) {
+                sum += v;
+            }
+            smoothedValue = sum / smoothingBuffer.size();
+        }
+        
+        //(X축: dataIndex, Y축: smoothedValue) - 스무딩된 값 사용
+        Entry newEntry = new Entry(dataIndex, smoothedValue);
         dataSet.addEntry(newEntry);
 
         if (dataSet.getEntryCount() > MAX_DATA_POINTS) {
