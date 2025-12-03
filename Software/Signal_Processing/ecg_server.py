@@ -38,9 +38,9 @@ except ImportError as e:
 # ============ 설정 ============
 HOST = '0.0.0.0'  # 모든 네트워크 인터페이스에서 수신
 PORT = 9999       # Android 앱의 PYTHON_SERVER_PORT와 동일해야 함
-BUFFER_SIZE = 10000  # 처리할 ECG 샘플 개수 (20초 분량, 500Hz 기준)
+BUFFER_SIZE = 1500  # 처리할 ECG 샘플 개수 (3초 분량, 500Hz 기준) - 최소 3개 R-peak 검출을 위해 1500개 필요
 SAMPLING_RATE = 500  # 샘플링 주파수 (Hz) - 아두이노 설정과 일치해야 함
-SIMILARITY_THRESHOLD = 0.75  # ECG 인증 유사도 임계값 (0-1) - TODO: 실제 데이터로 최적값 찾기
+SIMILARITY_THRESHOLD = 0.85  # ECG 인증 유사도 임계값 (0-1) - 보안 강화: 0.75에서 0.85로 상향 조정
 # ==============================
 
 
@@ -64,18 +64,26 @@ class ECGProcessor:
         self.data_buffer.append(value)
         return len(self.data_buffer) >= self.buffer_size
     
-    def process(self) -> dict:
-        """버퍼에 있는 ECG 데이터 처리"""
-        if len(self.data_buffer) < self.buffer_size:
+    def process(self, min_samples: int = None) -> dict:
+        """버퍼에 있는 ECG 데이터 처리
+        
+        Args:
+            min_samples: 최소 필요 샘플 수 (None이면 buffer_size 사용)
+        """
+        min_required = min_samples if min_samples is not None else self.buffer_size
+        
+        if len(self.data_buffer) < min_required:
             return {
                 "status": "error",
-                "message": f"데이터 부족: {len(self.data_buffer)}/{self.buffer_size}"
+                "message": f"데이터 부족: {len(self.data_buffer)}/{min_required}"
             }
         
-        ecg_data = np.array(list(self.data_buffer)[:self.buffer_size], dtype=np.float64)
+        # 사용할 샘플 수 결정 (버퍼 크기 또는 실제 버퍼 크기 중 작은 값)
+        samples_to_use = min(len(self.data_buffer), self.buffer_size)
+        ecg_data = np.array(list(self.data_buffer)[:samples_to_use], dtype=np.float64)
         
         # 버퍼에서 처리한 데이터 제거
-        for _ in range(self.buffer_size):
+        for _ in range(samples_to_use):
             if self.data_buffer:
                 self.data_buffer.popleft()
         
@@ -243,6 +251,8 @@ class ClientHandler(threading.Thread):
             self.cancel_current_mode()
         elif cmd == "VERIFY":
             self.verify_session()
+        elif cmd == "COMPLETE":
+            self.handle_complete_command()
         else:
             self.send_response({
                 "status": "error",
@@ -373,6 +383,47 @@ class ClientHandler(threading.Thread):
                 "status": "error",
                 "message": "활성 세션이 없습니다."
             })
+    
+    def handle_complete_command(self):
+        """데이터 수집 완료 신호 처리"""
+        if self.current_mode not in ["register", "login"]:
+            self.send_response({
+                "status": "error",
+                "message": "등록/로그인 모드가 아닙니다."
+            })
+            return
+        
+        buffer_status = self.processor.get_buffer_status()
+        buffer_count = len(self.processor.data_buffer)
+        
+        print(f"[완료 신호] 모드: {self.current_mode}, 버퍼: {buffer_status}, 총 샘플: {self.sample_count}")
+        
+        # 최소 버퍼 크기 체크
+        # 파이프라인이 최소 1500개(3초)를 요구하므로, 정확히 1500개 필요
+        min_required = 1500
+        
+        if buffer_count < min_required:
+            self.send_response({
+                "status": "error",
+                "message": f"데이터가 부족합니다. (버퍼: {buffer_count}/{self.processor.buffer_size}, 최소 {min_required}개 필요)"
+            })
+            return
+        
+        # 버퍼가 가득 차지 않았어도 처리 진행
+        # 충분한 데이터가 있으면 처리 가능
+        print(f"[강제 처리] 버퍼 데이터로 처리 시작 ({buffer_count}개 샘플, 최소 {min_required}개 요구)")
+        
+        # ECG 처리 (최소 샘플 수로 처리 허용)
+        result = self.processor.process(min_samples=min_required)
+        
+        if result["status"] == "success":
+            # 모드에 따른 처리
+            if self.current_mode == "register":
+                self.complete_registration(result)
+            elif self.current_mode == "login":
+                self.complete_login(result)
+        else:
+            self.send_response(result)
     
     def handle_ecg_data(self, line: str):
         """ECG 데이터 처리"""

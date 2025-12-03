@@ -19,11 +19,11 @@ import uuid
 class ECGAuthManager:
     """ECG 기반 사용자 인증 관리자"""
     
-    def __init__(self, data_dir: str = None, similarity_threshold: float = 0.75):
+    def __init__(self, data_dir: str = None, similarity_threshold: float = 0.85):
         """
         Args:
             data_dir: 사용자 데이터 저장 디렉토리
-            similarity_threshold: 인증 유사도 임계값 (0-1, 기본 0.75)
+            similarity_threshold: 인증 유사도 임계값 (0-1, 기본 0.85)
         """
         if data_dir is None:
             # 기본 저장 경로

@@ -31,8 +31,8 @@ class ECGSignaturePipeline:
         self.feature_extractor = FeatureExtractor(sampling_rate)
         self.signature_generator = SignatureGenerator()
         
-        # 최소 필요 샘플 수 (최소 3개의 비트를 위해)
-        self.min_samples = int(3 * sampling_rate)  # 3초
+        # 최소 필요 샘플 수 (최소 3개의 R-peak 검출을 위해, 3초 분량)
+        self.min_samples = int(3 * sampling_rate)  # 3초 (1500 샘플)
         
     def process(self, ecg_signal: np.ndarray) -> Dict:
         """
@@ -93,7 +93,26 @@ class ECGSignaturePipeline:
             }
             
             if len(r_peaks) < 3:
-                result['message'] = f'R-peak가 부족합니다 (검출: {len(r_peaks)}개, 최소 3개 필요)'
+                mean_hr = detection_info.get('mean_hr', 0)
+                signal_duration = len(preprocessed_ecg) / self.fs
+                
+                # 원인 분석 메시지 생성
+                if len(r_peaks) == 0:
+                    reason = "R-peak를 전혀 검출하지 못했습니다. 전극 연결이나 신호 품질을 확인하세요."
+                elif len(r_peaks) == 1:
+                    reason = "R-peak가 1개만 검출되었습니다. 신호가 너무 짧거나 노이즈가 많을 수 있습니다."
+                elif len(r_peaks) == 2:
+                    reason = f"R-peak가 2개만 검출되었습니다. 심박수가 느린 경우(약 {mean_hr:.0f} BPM) 더 긴 신호가 필요할 수 있습니다."
+                else:
+                    reason = "R-peak 검출 부족"
+                
+                result['message'] = (
+                    f'R-peak가 부족합니다. '
+                    f'검출: {len(r_peaks)}개/3개 필요, '
+                    f'심박수: {mean_hr:.0f} BPM (예상), '
+                    f'신호 길이: {signal_duration:.1f}초. '
+                    f'{reason}'
+                )
                 result['status'] = 'insufficient_peaks'
                 return result
             

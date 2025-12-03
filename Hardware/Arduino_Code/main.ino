@@ -7,7 +7,7 @@ SoftwareSerial bluetooth(10, 11); // RX, TX
 const int ECG_OUTPUT = A0;  // ECG 신호 출력 (OUTPUT 핀)
 
 // 샘플링 설정
-const int SAMPLE_DELAY = 100;  // 2ms = 500Hz 샘플링
+const int SAMPLE_DELAY = 2;  // 2ms = 500Hz 샘플링
 
 void setup() {
   // 시리얼 통신 시작
@@ -32,6 +32,8 @@ void loop() {
   bluetooth.println(ecgValue);
   
   // PC 시리얼 모니터로도 출력 (디버깅용)
+  // Serial Plotter에서 그래프로 보려면 숫자만 출력 (현재 형식)
+  // 또는 CSV 형식: Serial.print(ecgValue); Serial.print(","); Serial.println(millis());
   Serial.println(ecgValue);
   
   // 샘플링 주기 유지 (500Hz)

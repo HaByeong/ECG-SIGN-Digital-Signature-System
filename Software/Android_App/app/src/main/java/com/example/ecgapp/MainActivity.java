@@ -57,7 +57,7 @@ import org.json.JSONObject;
 public class MainActivity extends AppCompatActivity {
 
     private TcpClientSender tcpSender;
-    private final String PYTHON_SERVER_IP = "192.168.219.182";  // TODO: 서버 실행 시 출력되는 IP로 변경 필요
+    private final String PYTHON_SERVER_IP = "192.168.219.54";  // TODO: 서버 실행 시 출력되는 IP로 변경 필요
     private final int PYTHON_SERVER_PORT = 9999;
 
     private static final String TAG = "ECG_APP_CLASSIC";
@@ -102,7 +102,14 @@ public class MainActivity extends AppCompatActivity {
     private volatile int dummyDataSampleCount = 0;
     private volatile boolean isRegisterMode = false;
     private volatile boolean isLoginMode = false;
-    private volatile int requiredSamples = 10000; // 서버에서 받은 값으로 업데이트됨
+    private volatile int requiredSamples = 1500; // 서버에서 받은 값으로 업데이트됨 (기본: 1500개, 약 3초)
+    
+    // 더미 데이터 자연스러움을 위한 변수들
+    private volatile double currentHeartRate = 72.0; // 현재 심박수 (서서히 변동)
+    private volatile double baselineDrift = 0.0; // 베이스라인 드리프트
+    private volatile double baselineTarget = 0.0; // 베이스라인 목표값
+    private volatile int beatCounter = 0; // 비트 카운터
+    private volatile double heartRateVelocity = 0.0; // 심박수 변화 속도
 
 
     @Override
@@ -686,13 +693,20 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void generateDummyECGData() {
-        // ECG 파형 시뮬레이션 (심박수 72 BPM, 500Hz 샘플링)
+        // ECG 파형 시뮬레이션 (심박수 변동, 500Hz 샘플링)
         final int samplingRate = 500; // 500Hz
-        final double heartRate = 72.0; // BPM
-        final double samplesPerBeat = (60.0 / heartRate) * samplingRate; // 비트당 샘플 수
+        
+        // 초기화
+        currentHeartRate = 72.0 + (Math.random() - 0.5) * 10; // 67-77 BPM 범위
+        baselineDrift = 0.0;
+        baselineTarget = (Math.random() - 0.5) * 30; // 베이스라인 목표값
+        beatCounter = 0;
+        heartRateVelocity = (Math.random() - 0.5) * 0.5; // 심박수 변화 속도
         
         int sampleIndex = 0;
         double time = 0;
+        double beatStartTime = 0.0;
+        double currentBeatDuration = 60.0 / currentHeartRate;
         
         while (isDummyDataRunning && !Thread.currentThread().isInterrupted()) {
             try {
@@ -705,8 +719,33 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
                 
+                // 심박수 변동성 추가 (서서히 변동, 60-85 BPM 범위)
+                heartRateVelocity += (Math.random() - 0.5) * 0.1;
+                heartRateVelocity = Math.max(-1.0, Math.min(1.0, heartRateVelocity)); // 제한
+                currentHeartRate += heartRateVelocity * 0.01;
+                currentHeartRate = Math.max(60.0, Math.min(85.0, currentHeartRate)); // 범위 제한
+                
+                // 베이스라인 드리프트 시뮬레이션
+                if (Math.random() < 0.005) { // 가끔 베이스라인 목표 변경
+                    baselineTarget = (Math.random() - 0.5) * 30;
+                }
+                // 베이스라인을 목표값으로 서서히 이동
+                baselineDrift += (baselineTarget - baselineDrift) * 0.002;
+                
+                // 비트 주기 완료 체크 (RR 간격 변동성 포함)
+                double timeSinceBeatStart = time - beatStartTime;
+                if (timeSinceBeatStart >= currentBeatDuration) {
+                    // 다음 비트 시작
+                    beatStartTime = time;
+                    beatCounter++;
+                    
+                    // RR 간격 변동성 (부정맥 같은 느낌)
+                    double rrVariation = 1.0 + (Math.random() - 0.5) * 0.15; // ±7.5% 변동
+                    currentBeatDuration = (60.0 / currentHeartRate) * rrVariation;
+                }
+                
                 // ECG 파형 생성 (P, QRS, T 파 포함)
-                int ecgValue = generateECGWaveform(time, samplesPerBeat);
+                int ecgValue = generateECGWaveform(timeSinceBeatStart, currentBeatDuration, beatCounter, time);
                 
                 // 그래프에 추가
                 handler.post(() -> {
@@ -741,7 +780,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                         // 더미 데이터 전송 중지 (서버가 이미 충분한 데이터를 받았을 수 있음)
-                        // 서버가 10000개를 받으면 자동으로 처리 시작
+                        // 서버가 1000개를 받으면 자동으로 처리 시작
                         isDummyDataRunning = false;
                         handler.post(() -> {
                             dummyDataButton.setText("🧪 더미 ECG 데이터 생성 (테스트용)");
@@ -758,11 +797,6 @@ public class MainActivity extends AppCompatActivity {
                 
                 time += 2.0 / 1000.0; // 초 단위
                 sampleIndex++;
-                
-                // 한 비트 주기 완료 시 리셋 (안정적인 파형 유지)
-                if (time >= (60.0 / heartRate)) {
-                    time = 0;
-                }
                 
             } catch (InterruptedException e) {
                 isDummyDataRunning = false;
@@ -787,48 +821,71 @@ public class MainActivity extends AppCompatActivity {
         });
     }
     
-    private int generateECGWaveform(double time, double samplesPerBeat) {
+    private int generateECGWaveform(double timeSinceBeatStart, double beatDuration, int beatNumber, double absoluteTime) {
         // 정규화된 시간 (0~1, 한 비트 주기)
-        double normalizedTime = (time % (60.0 / 72.0)) / (60.0 / 72.0);
+        double normalizedTime = timeSinceBeatStart / beatDuration;
         
-        // 베이스라인
-        double baseline = 512.0;
+        // 베이스라인 (드리프트 포함)
+        double baseline = 512.0 + baselineDrift;
         
-        // P파 (0.0 ~ 0.15)
+        // 비트마다 진폭 변동성 추가 (약간씩 다른 파형)
+        double amplitudeVariation = 1.0 + (Math.random() - 0.5) * 0.1; // ±5% 변동
+        
+        // P파 (0.0 ~ 0.15) - 진폭 변동성 포함
         double pWave = 0;
         if (normalizedTime >= 0.0 && normalizedTime < 0.15) {
             double pPhase = (normalizedTime - 0.0) / 0.15;
-            pWave = 20 * Math.sin(Math.PI * pPhase);
+            double pAmplitude = 20 * amplitudeVariation * (0.9 + Math.random() * 0.2); // ±10% 추가 변동
+            pWave = pAmplitude * Math.sin(Math.PI * pPhase);
         }
         
-        // QRS 복합체 (0.15 ~ 0.25)
+        // QRS 복합체 (0.15 ~ 0.25) - 가장 중요한 파형, 약간의 변동
         double qrsWave = 0;
         if (normalizedTime >= 0.15 && normalizedTime < 0.25) {
             double qrsPhase = (normalizedTime - 0.15) / 0.1;
+            // QRS 진폭 변동성 (±3%)
+            double qrsAmplitudeFactor = 1.0 + (Math.random() - 0.5) * 0.06;
             // Q, R, S 파 시뮬레이션
             if (qrsPhase < 0.2) {
-                qrsWave = -30 * qrsPhase; // Q파
+                qrsWave = -30 * qrsAmplitudeFactor * qrsPhase; // Q파
             } else if (qrsPhase < 0.5) {
-                qrsWave = 200 * (qrsPhase - 0.2) - 6; // R파 (상승)
+                qrsWave = (200 * qrsAmplitudeFactor) * (qrsPhase - 0.2) - 6; // R파 (상승)
             } else if (qrsPhase < 0.8) {
-                qrsWave = 200 * (0.5 - qrsPhase) + 54; // R파 (하강)
+                qrsWave = (200 * qrsAmplitudeFactor) * (0.5 - qrsPhase) + 54; // R파 (하강)
             } else {
-                qrsWave = -20 * (qrsPhase - 0.8); // S파
+                qrsWave = -20 * qrsAmplitudeFactor * (qrsPhase - 0.8); // S파
             }
         }
         
-        // T파 (0.25 ~ 0.7)
+        // T파 (0.25 ~ 0.7) - 진폭 변동성 포함
         double tWave = 0;
         if (normalizedTime >= 0.25 && normalizedTime < 0.7) {
             double tPhase = (normalizedTime - 0.25) / 0.45;
-            tWave = 40 * Math.sin(Math.PI * tPhase);
+            double tAmplitude = 40 * amplitudeVariation * (0.85 + Math.random() * 0.3); // ±15% 변동
+            tWave = tAmplitude * Math.sin(Math.PI * tPhase);
         }
         
-        // 노이즈 추가 (약간의 랜덤 노이즈)
-        double noise = (Math.random() - 0.5) * 5;
+        // 다양한 노이즈 추가
+        // 1. 백색 노이즈 (항상 존재)
+        double whiteNoise = (Math.random() - 0.5) * 8;
+        
+        // 2. 전원 노이즈 시뮬레이션 (60Hz hum) - 절대 시간 기반으로 연속적
+        double powerlineNoise = 2.0 * Math.sin(2 * Math.PI * 60.0 * absoluteTime);
+        
+        // 3. 근육 노이즈 (가끔 발생하는 큰 노이즈)
+        double muscleNoise = 0;
+        if (Math.random() < 0.02) { // 2% 확률로 큰 노이즈
+            muscleNoise = (Math.random() - 0.5) * 25;
+        }
+        
+        // 4. 베이스라인 고주파 노이즈
+        double baselineNoise = (Math.random() - 0.5) * 3;
+        
+        // 최종 노이즈 합성
+        double totalNoise = whiteNoise + powerlineNoise * 0.5 + muscleNoise + baselineNoise;
         
         // 최종 값 계산
-        double value = baseline + pWave + qrsWave + tWave + noise;
+        double value = baseline + pWave + qrsWave + tWave + totalNoise;
         
         // 0~1023 범위로 클리핑
         return (int) Math.max(0, Math.min(1023, value));
@@ -985,9 +1042,17 @@ public class MainActivity extends AppCompatActivity {
             Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
             targetDevice = null;
 
+            Log.d(TAG, "페어링된 장치 개수: " + pairedDevices.size());
+            
+            // 페어링된 모든 장치 이름 로그 출력
             for (BluetoothDevice device : pairedDevices) {
-                if (TARGET_DEVICE_NAME.equals(device.getName())) {
+                String deviceName = device.getName();
+                String deviceAddress = device.getAddress();
+                Log.d(TAG, "페어링된 장치: 이름=" + deviceName + ", 주소=" + deviceAddress);
+                
+                if (TARGET_DEVICE_NAME.equals(deviceName)) {
                     targetDevice = device;
+                    Log.d(TAG, "타겟 장치 발견: " + deviceName);
                     break;
                 }
             }
@@ -1001,10 +1066,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (targetDevice != null) {
+            Log.d(TAG, "장치 연결 시도: " + targetDevice.getName() + " (" + targetDevice.getAddress() + ")");
             connectToDevice();
         } else {
+            Log.w(TAG, "타겟 장치를 찾을 수 없음: " + TARGET_DEVICE_NAME);
             handler.post(() -> {
-                statusTextView.setText("❌ " + TARGET_DEVICE_NAME + " 모듈을 찾을 수 없음. 휴대폰 블루투스 설정에서 페어링 확인");
+                statusTextView.setText("❌ " + TARGET_DEVICE_NAME + " 모듈을 찾을 수 없음.\n휴대폰 블루투스 설정에서 페어링 확인\n(Logcat에서 페어링된 장치 목록 확인)");
                 scanButton.setEnabled(true);
             });
         }
@@ -1023,12 +1090,14 @@ public class MainActivity extends AppCompatActivity {
                 bluetoothSocket.connect();
                 setBluetoothConnected(true);
 
+                Log.d(TAG, "블루투스 소켓 연결 성공");
                 handler.post(() -> {
-                    statusTextView.setText("✅ 블루투스 연결 성공. 서버 연결 준비 완료.");
+                    statusTextView.setText("✅ 블루투스 연결 성공. 데이터 수신 대기 중...");
                 });
 
                 connectedThread = new ConnectedThread(bluetoothSocket);
                 connectedThread.start();
+                Log.d(TAG, "블루투스 데이터 수신 스레드 시작됨");
 
             } catch (SecurityException e) {
                 Log.e(TAG, "연결 권한 오류", e);
@@ -1123,13 +1192,29 @@ public class MainActivity extends AppCompatActivity {
     private class ConnectedThread extends Thread {
         private final InputStream mmInStream;
         private final BufferedReader mmBufferReader;
+        private final BluetoothSocket mmSocket;
 
         public ConnectedThread(BluetoothSocket socket) {
+            this.mmSocket = socket;
             InputStream tmpIn = null;
             BufferedReader tmpReader = null;
             try {
-                tmpIn = socket.getInputStream();
-                tmpReader = new BufferedReader(new InputStreamReader(tmpIn));
+                if (socket == null) {
+                    Log.e(TAG, "BluetoothSocket이 null입니다.");
+                } else if (!socket.isConnected()) {
+                    Log.e(TAG, "BluetoothSocket이 연결되지 않았습니다.");
+                } else {
+                    Log.d(TAG, "BluetoothSocket 연결 상태 확인: 연결됨");
+                    tmpIn = socket.getInputStream();
+                    if (tmpIn == null) {
+                        Log.e(TAG, "InputStream을 가져올 수 없습니다.");
+                    } else {
+                        Log.d(TAG, "InputStream 생성 성공, BufferedReader 생성 중...");
+                        // 최소 버퍼 크기(1바이트)로 설정하여 즉시 처리되도록 함
+                        tmpReader = new BufferedReader(new InputStreamReader(tmpIn, "UTF-8"), 1);
+                        Log.d(TAG, "블루투스 InputStream 및 BufferedReader 생성 성공");
+                    }
+                }
             }
             catch (IOException e) {
                 Log.e(TAG, "Input Stream 생성 실패", e);
@@ -1140,18 +1225,73 @@ public class MainActivity extends AppCompatActivity {
 
         @SuppressLint("SetTextI18n")
         public void run() {
-            if (mmBufferReader == null) return;
+            if (mmBufferReader == null) {
+                Log.e(TAG, "블루투스 InputStream이 null입니다. 연결을 확인하세요.");
+                handler.post(() -> statusTextView.setText("❌ 블루투스 스트림 생성 실패"));
+                return;
+            }
+
+            if (mmSocket == null || !mmSocket.isConnected()) {
+                Log.e(TAG, "블루투스 소켓이 연결되지 않았습니다.");
+                handler.post(() -> statusTextView.setText("❌ 블루투스 소켓 연결 안됨"));
+                return;
+            }
+
+            Log.d(TAG, "블루투스 데이터 수신 스레드 시작 (소켓 연결됨: " + mmSocket.isConnected() + ")");
+            handler.post(() -> statusTextView.setText("📡 블루투스 데이터 수신 대기 중..."));
 
             String line;
+            int receivedCount = 0;
+            int errorCount = 0;
+            long lastLogTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
+            long lastHeartbeat = System.currentTimeMillis();
 
             while (!Thread.currentThread().isInterrupted()) {
                 try {
+                    // 소켓 연결 상태 확인
+                    if (!mmSocket.isConnected()) {
+                        Log.w(TAG, "블루투스 소켓 연결이 끊어졌습니다.");
+                        // 등록/로그인 모드 중이면 모드 종료
+                        if (isRegisterMode || isLoginMode) {
+                            isRegisterMode = false;
+                            isLoginMode = false;
+                            dummyDataSampleCount = 0;
+                            stopDummyData();
+                            handler.post(() -> {
+                                hideProgress();
+                                statusTextView.setText("❌ 블루투스 연결 끊김 - 등록/로그인 중단");
+                                Toast.makeText(MainActivity.this, "❌ 블루투스 연결이 끊겨 등록/로그인이 중단되었습니다.", Toast.LENGTH_LONG).show();
+                            });
+                        }
+                        break;
+                    }
+
+                    // 하트비트 로그 (10초마다, 데이터가 없어도)
+                    long currentTime = System.currentTimeMillis();
+                    if (currentTime - lastHeartbeat > 10000) {
+                        double elapsed = (currentTime - startTime) / 1000.0;
+                        Log.d(TAG, String.format("블루투스 수신 대기 중... (%.1f초 경과, 수신: %d개, 오류: %d개)", 
+                            elapsed, receivedCount, errorCount));
+                        lastHeartbeat = currentTime;
+                    }
+
+                    // readLine()은 블로킹되므로, 데이터가 오지 않으면 여기서 대기
+                    // Arduino에서 데이터를 보내지 않으면 이 부분에서 멈춤
                     line = mmBufferReader.readLine();
 
                     if (line != null && !line.isEmpty()) {
+                        receivedCount++;
+                        String trimmedLine = line.trim();
+                        
+                        // 시작 메시지 무시
+                        if (trimmedLine.contains("AD8232") || trimmedLine.contains("Started")) {
+                            Log.d(TAG, "Arduino 시작 메시지 수신: " + trimmedLine);
+                            continue;
+                        }
+                        
                         try {
                             // 문자열에서 정수로 변환
-                            String trimmedLine = line.trim();
                             int ecgValue = Integer.parseInt(trimmedLine);
                             
                             // 데이터 범위 검증 (일반적인 ECG ADC 범위: 0-1023)
@@ -1165,26 +1305,146 @@ public class MainActivity extends AppCompatActivity {
                                 addEntry(ecgValue);
                             });
 
-                            if (tcpSender != null) {
-                                // TCP 서버로 데이터 전송 시도
+                            // TCP로 전송 (등록/로그인 모드일 때만, 그리고 아직 수집 중일 때만)
+                            if (tcpSender != null && (isRegisterMode || isLoginMode) && dummyDataSampleCount < requiredSamples) {
+                                tcpSender.sendData(ecgValue);
+                                dummyDataSampleCount++; // 블루투스 데이터도 카운트
+                                
+                                // 진행률 업데이트 (100개마다)
+                                if (dummyDataSampleCount % 100 == 0) {
+                                    int progress = (int) ((dummyDataSampleCount * 100.0) / requiredSamples);
+                                    progress = Math.min(95, progress); // 최대 95%까지 (수집 중)
+                                    updateProgress(progress, dummyDataSampleCount + " / " + requiredSamples + " 샘플");
+                                }
+                                
+                                // 필요한 샘플 수를 모두 수집했으면
+                                if (dummyDataSampleCount >= requiredSamples) {
+                                    // 샘플 수집 완료 표시
+                                    handler.post(() -> {
+                                        if (isRegisterMode) {
+                                            showProgress("등록", "샘플 데이터 수집 완료 - 서버 처리 대기 중...", 100, requiredSamples + " / " + requiredSamples + " 샘플");
+                                            statusTextView.setText("샘플 데이터 수집 완료 - 서버에서 등록 처리 중...");
+                                            Toast.makeText(MainActivity.this, "📊 샘플 데이터 수집 완료하였습니다. 서버 처리 중...", Toast.LENGTH_SHORT).show();
+                                        } else if (isLoginMode) {
+                                            showProgress("로그인", "샘플 데이터 수집 완료 - 서버 처리 대기 중...", 100, requiredSamples + " / " + requiredSamples + " 샘플");
+                                            statusTextView.setText("샘플 데이터 수집 완료 - 서버에서 로그인 처리 중...");
+                                            Toast.makeText(MainActivity.this, "📊 샘플 데이터 수집 완료하였습니다. 서버 처리 중...", Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                                    // 1000개 수집 완료 후 서버에 완료 신호 전송
+                                    if (tcpSender != null) {
+                                        tcpSender.sendCommand("COMPLETE");
+                                        Log.d(TAG, "블루투스 데이터 수집 완료 (" + dummyDataSampleCount + "개). 서버에 완료 신호 전송.");
+                                    }
+                                }
+                            } else if (tcpSender != null && !(isRegisterMode || isLoginMode)) {
+                                // 모드가 아니면 데이터만 전송 (진행률 업데이트 없음)
                                 tcpSender.sendData(ecgValue);
                             }
+                            // 등록/로그인 모드이고 이미 1000개 수집 완료했으면 전송하지 않음
                             
-                            // 디버그 로그 (100개마다)
-                            if (System.currentTimeMillis() % 10000 < 100) {
-                                Log.v(TAG, "ECG 데이터 수신: " + ecgValue);
+                            // 주기적으로 로그 출력 (5초마다)
+                            currentTime = System.currentTimeMillis();
+                            if (currentTime - lastLogTime > 5000) {
+                                double elapsed = (currentTime - startTime) / 1000.0;
+                                double rate = receivedCount / elapsed;
+                                String modeInfo = "";
+                                if (isRegisterMode || isLoginMode) {
+                                    modeInfo = String.format(", 등록/로그인 모드: %d/%d 샘플", dummyDataSampleCount, requiredSamples);
+                                }
+                                Log.d(TAG, String.format("블루투스 데이터 수신 중... (총 %d개, %.1f초 경과, %.1f개/초, 현재 값: %d%s)", 
+                                    receivedCount, elapsed, rate, ecgValue, modeInfo));
+                                lastLogTime = currentTime;
                             }
 
                         } catch (NumberFormatException e) {
-                            Log.w(TAG, "수신된 데이터가 숫자가 아님: [" + line + "] (길이: " + line.length() + ")");
+                            errorCount++;
+                            Log.w(TAG, "수신된 데이터가 숫자가 아님: [" + trimmedLine + "] (길이: " + trimmedLine.length() + ", 오류 횟수: " + errorCount + ")");
+                            
+                            // 너무 많은 오류가 발생하면 경고
+                            if (errorCount > 10 && receivedCount == 0) {
+                                Log.e(TAG, "데이터 수신 실패: 숫자가 아닌 데이터만 수신되고 있습니다. Arduino 코드를 확인하세요.");
+                                handler.post(() -> statusTextView.setText("⚠️ 데이터 포맷 오류: 숫자가 아닌 데이터 수신"));
+                            }
                         }
+                    } else if (line == null) {
+                        // 스트림이 닫혔을 때
+                        Log.w(TAG, "블루투스 스트림이 null을 반환했습니다. 연결이 끊어진 것 같습니다.");
+                        // 등록/로그인 모드 중이면 모드 종료
+                        if (isRegisterMode || isLoginMode) {
+                            isRegisterMode = false;
+                            isLoginMode = false;
+                            dummyDataSampleCount = 0;
+                            stopDummyData();
+                            handler.post(() -> {
+                                hideProgress();
+                                statusTextView.setText("❌ 블루투스 연결 끊김 - 등록/로그인 중단");
+                                Toast.makeText(MainActivity.this, "❌ 블루투스 연결이 끊겨 등록/로그인이 중단되었습니다.", Toast.LENGTH_LONG).show();
+                            });
+                        }
+                        break;
+                    } else {
+                        // 빈 라인 - 정상일 수 있음
+                        Log.v(TAG, "빈 라인 수신 (정상)");
                     }
                 } catch (IOException e) {
-                    Log.e(TAG, "블루투스 연결 끊김", e);
-                    closeAllConnections(); // 모든 연결 닫기 (복원됨)
-                    handler.post(() -> statusTextView.setText("❌ 블루투스 연결 끊김"));
-                    break;
+                    Log.e(TAG, "블루투스 읽기 오류", e);
+                    errorCount++;
+                    
+                    // 일시적 오류인지 확인 (연결 끊김인지)
+                    if (!mmSocket.isConnected()) {
+                        Log.e(TAG, "블루투스 연결이 끊어졌습니다.");
+                        // 등록/로그인 모드 중이면 모드 종료
+                        if (isRegisterMode || isLoginMode) {
+                            isRegisterMode = false;
+                            isLoginMode = false;
+                            dummyDataSampleCount = 0;
+                            stopDummyData();
+                            handler.post(() -> {
+                                hideProgress();
+                                statusTextView.setText("❌ 블루투스 연결 끊김 - 등록/로그인 중단");
+                                Toast.makeText(MainActivity.this, "❌ 블루투스 연결이 끊겨 등록/로그인이 중단되었습니다.", Toast.LENGTH_LONG).show();
+                            });
+                        }
+                        closeAllConnections();
+                        handler.post(() -> statusTextView.setText("❌ 블루투스 연결 끊김: " + e.getMessage()));
+                        break;
+                    }
+                    
+                    // 일시적 오류인 경우 잠시 대기 후 재시도
+                    if (errorCount < 5) {
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException ie) {
+                            break;
+                        }
+                    } else {
+                        Log.e(TAG, "너무 많은 오류 발생. 연결을 종료합니다.");
+                        // 등록/로그인 모드 중이면 모드 종료
+                        if (isRegisterMode || isLoginMode) {
+                            isRegisterMode = false;
+                            isLoginMode = false;
+                            dummyDataSampleCount = 0;
+                            stopDummyData();
+                            handler.post(() -> {
+                                hideProgress();
+                                statusTextView.setText("❌ 블루투스 오류 - 등록/로그인 중단");
+                                Toast.makeText(MainActivity.this, "❌ 블루투스 오류로 등록/로그인이 중단되었습니다.", Toast.LENGTH_LONG).show();
+                            });
+                        }
+                        closeAllConnections();
+                        handler.post(() -> statusTextView.setText("❌ 블루투스 오류가 너무 많습니다."));
+                        break;
+                    }
                 }
+            }
+            
+            double totalTime = (System.currentTimeMillis() - startTime) / 1000.0;
+            Log.d(TAG, String.format("블루투스 데이터 수신 스레드 종료 (총 %d개 수신, 오류 %d개, %.1f초 실행)", 
+                receivedCount, errorCount, totalTime));
+            
+            if (receivedCount == 0) {
+                handler.post(() -> statusTextView.setText("⚠️ 블루투스 연결됨, 하지만 데이터 수신 없음"));
             }
         }
     }
@@ -1209,6 +1469,12 @@ public class MainActivity extends AppCompatActivity {
         public void sendData(int data) {
             // offer를 사용하여 큐에 데이터를 추가합니다.
             dataQueue.offer(data);
+            
+            // 큐 크기 모니터링 (딜레이 확인용)
+            int queueSize = dataQueue.size();
+            if (queueSize > 100) {
+                Log.w(TCP_TAG, "큐 크기 경고: " + queueSize + "개 대기 중 (네트워크 딜레이 발생 가능)");
+            }
         }
         
         public void sendCommand(String command) {
@@ -1292,7 +1558,7 @@ public class MainActivity extends AppCompatActivity {
 
                     // 데이터를 줄바꿈 문자와 함께 전송
                     out.println(dataToSend);
-                    Log.v(TCP_TAG, "Sent raw ECG: " + dataToSend);
+                    Log.v(TCP_TAG, "Sent raw ECG: " + dataToSend + " (큐 크기: " + dataQueue.size() + ")");
 
                 } catch (InterruptedException e) {
                     Log.w(TCP_TAG, "Data sender interrupted.");
@@ -1384,9 +1650,9 @@ public class MainActivity extends AppCompatActivity {
                 } else if ("ready".equals(status)) {
                     // 등록/로그인 준비 상태 - 데이터 수집 시작
                     String mode = json.optString("mode", "");
-                    int serverRequiredSamples = json.optInt("required_samples", 10000);
-                    // 서버에서 받은 값과 10000 중 큰 값을 사용 (최소 10000개 보장)
-                    requiredSamples = Math.max(10000, serverRequiredSamples);
+                    int serverRequiredSamples = json.optInt("required_samples", 1500);
+                    // 서버에서 받은 값과 1500 중 큰 값을 사용 (최소 1500개 보장)
+                    requiredSamples = Math.max(1500, serverRequiredSamples);
                     dummyDataSampleCount = 0; // 샘플 카운터 리셋
                     
                     // 모드 플래그 설정
