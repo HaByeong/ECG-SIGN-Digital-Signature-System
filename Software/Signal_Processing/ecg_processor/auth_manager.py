@@ -190,16 +190,15 @@ class ECGAuthManager:
             
             for uid, user_data in users_to_check.items():
                 for template in user_data.get('ecg_templates', []):
-                    stored_vector = np.array(template.get('normalized_vector', []))
+                    # 원본 특징 벡터 사용 (정규화된 벡터 대신)
+                    # Min-Max 정규화는 개인 특성을 제거하므로 원본 사용
+                    stored_vector = np.array(template.get('feature_vector', []))
                     
                     if len(stored_vector) == 0:
-                        stored_vector = np.array(template.get('feature_vector', []))
+                        continue
                     
-                    # 벡터 길이 맞추기
-                    if len(input_normalized) > 0 and len(stored_vector) > 0:
-                        compare_input = input_normalized
-                    else:
-                        compare_input = input_vector
+                    # 원본 특징 벡터로 비교
+                    compare_input = input_vector
                     
                     # 길이가 다르면 짧은 쪽에 맞춤
                     min_len = min(len(compare_input), len(stored_vector))
@@ -209,8 +208,8 @@ class ECGAuthManager:
                     v1 = compare_input[:min_len]
                     v2 = stored_vector[:min_len]
                     
-                    # 코사인 유사도 계산
-                    similarity = self._cosine_similarity(v1, v2)
+                    # 유클리드 거리 기반 유사도 계산 (코사인 유사도보다 구별력 높음)
+                    similarity = self._euclidean_similarity(v1, v2)
                     
                     if similarity > best_similarity:
                         best_similarity = similarity
@@ -435,6 +434,35 @@ class ECGAuthManager:
             return 0.0
         
         return float(np.dot(v1, v2) / (norm1 * norm2))
+    
+    def _euclidean_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:
+        """
+        하이브리드 유사도 계산 (코사인 + 유클리드)
+        - 코사인: 패턴의 형태 비교
+        - 유클리드: 값의 실제 차이 비교
+        """
+        # Z-score 정규화
+        v1_normalized = (v1 - np.mean(v1)) / (np.std(v1) + 1e-10)
+        v2_normalized = (v2 - np.mean(v2)) / (np.std(v2) + 1e-10)
+        
+        # 1. 코사인 유사도 (패턴 형태)
+        norm1 = np.linalg.norm(v1_normalized)
+        norm2 = np.linalg.norm(v2_normalized)
+        if norm1 > 0 and norm2 > 0:
+            cosine_sim = np.dot(v1_normalized, v2_normalized) / (norm1 * norm2)
+        else:
+            cosine_sim = 0.0
+        
+        # 2. 유클리드 거리 기반 유사도
+        distance = np.linalg.norm(v1_normalized - v2_normalized)
+        scale = 15.0  # 더 관대하게 조정 (5 → 15)
+        euclidean_sim = 1.0 / (1.0 + distance / scale)
+        
+        # 3. 하이브리드: 코사인 70% + 유클리드 30%
+        # 코사인이 더 중요하지만, 유클리드로 세부 차이 반영
+        hybrid_similarity = 0.7 * cosine_sim + 0.3 * euclidean_sim
+        
+        return float(max(0, min(1, hybrid_similarity)))
     
     def cleanup_expired_sessions(self):
         """만료된 세션 정리"""

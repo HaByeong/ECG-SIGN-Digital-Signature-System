@@ -38,9 +38,9 @@ except ImportError as e:
 # ============ 설정 ============
 HOST = '0.0.0.0'  # 모든 네트워크 인터페이스에서 수신
 PORT = 9999       # Android 앱의 PYTHON_SERVER_PORT와 동일해야 함
-BUFFER_SIZE = 1500  # 처리할 ECG 샘플 개수 (3초 분량, 500Hz 기준) - 최소 3개 R-peak 검출을 위해 1500개 필요
+BUFFER_SIZE = 3000  # 처리할 ECG 샘플 개수 (6초 분량, 500Hz 기준) - 정확도 향상을 위해 6-8개 심박 필요
 SAMPLING_RATE = 500  # 샘플링 주파수 (Hz) - 아두이노 설정과 일치해야 함
-SIMILARITY_THRESHOLD = 0.85  # ECG 인증 유사도 임계값 (0-1) - 보안 강화: 0.75에서 0.85로 상향 조정
+SIMILARITY_THRESHOLD = 0.80  # ECG 인증 유사도 임계값 (0-1) - 하이브리드 알고리즘에 맞게 조정
 # ==============================
 
 
@@ -123,7 +123,12 @@ class ECGProcessor:
             print(f"[에러] 파이프라인 처리 실패: {e}")
             import traceback
             traceback.print_exc()
-            return self._process_basic(ecg_data)
+            return {
+                "status": "error",
+                "message": f"파이프라인 처리 실패: {e}",
+                "sample_count": len(ecg_data),
+                "timestamp": datetime.now().isoformat()
+            }
     
     def _process_basic(self, ecg_data: np.ndarray) -> dict:
         """기본 ECG 처리 (파이프라인 실패 시 폴백)"""
@@ -387,10 +392,10 @@ class ClientHandler(threading.Thread):
     def handle_complete_command(self):
         """데이터 수집 완료 신호 처리"""
         if self.current_mode not in ["register", "login"]:
-            self.send_response({
-                "status": "error",
-                "message": "등록/로그인 모드가 아닙니다."
-            })
+            # 이미 처리가 완료되어 idle 상태일 수 있음 (버퍼 가득 차서 자동 처리된 경우)
+            # 오류 대신 무시하거나 info 메시지 전송
+            print(f"[완료 신호] 이미 처리 완료됨 또는 모드 아님 (현재 모드: {self.current_mode})")
+            # 오류를 보내지 않고 조용히 무시 (이미 결과가 전송되었을 것임)
             return
         
         buffer_status = self.processor.get_buffer_status()
@@ -399,8 +404,8 @@ class ClientHandler(threading.Thread):
         print(f"[완료 신호] 모드: {self.current_mode}, 버퍼: {buffer_status}, 총 샘플: {self.sample_count}")
         
         # 최소 버퍼 크기 체크
-        # 파이프라인이 최소 1500개(3초)를 요구하므로, 정확히 1500개 필요
-        min_required = 1500
+        # 파이프라인이 최소 3000개(6초)를 요구하므로, 정확히 3000개 필요
+        min_required = 3000
         
         if buffer_count < min_required:
             self.send_response({

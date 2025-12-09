@@ -57,7 +57,7 @@ import org.json.JSONObject;
 public class MainActivity extends AppCompatActivity {
 
     private TcpClientSender tcpSender;
-    private final String PYTHON_SERVER_IP = "192.168.219.54";  // TODO: 서버 실행 시 출력되는 IP로 변경 필요
+    private final String PYTHON_SERVER_IP = "192.168.219.54";  // 여기 파이썬 서버가 열어준 IP로 변경
     private final int PYTHON_SERVER_PORT = 9999;
 
     private static final String TAG = "ECG_APP_CLASSIC";
@@ -105,7 +105,9 @@ public class MainActivity extends AppCompatActivity {
     private volatile int dummyDataSampleCount = 0;
     private volatile boolean isRegisterMode = false;
     private volatile boolean isLoginMode = false;
-    private volatile int requiredSamples = 1500; // 서버에서 받은 값으로 업데이트됨 (기본: 1500개, 약 3초)
+    private volatile int requiredSamples = 3000; // 서버에서 받은 값으로 업데이트됨 (기본: 3000개, 약 6초)
+    private static final int STABILIZATION_SECONDS = 5; // 심박 안정화 대기 시간
+    private volatile boolean isStabilizing = false; // 안정화 중 플래그
     
     // 더미 데이터 자연스러움을 위한 변수들
     private volatile double currentHeartRate = 72.0; // 현재 심박수 (서서히 변동)
@@ -186,15 +188,10 @@ public class MainActivity extends AppCompatActivity {
         // 확인 다이얼로그 표시
         new AlertDialog.Builder(this)
             .setTitle("등록 확인")
-            .setMessage("ECG 데이터를 받으시겠습니까?\n\n등록을 위해 ECG 데이터를 측정합니다.")
+            .setMessage("ECG 데이터를 받으시겠습니까?\n\n등록을 위해 ECG 데이터를 측정합니다.\n(5초 안정화 후 6초간 측정)")
             .setPositiveButton("YES", (dialog, which) -> {
-                // YES 선택 시 등록 모드 시작
-                isRegisterMode = true;
-                isLoginMode = false;
-                showProgress("등록", "등록 모드 시작 중...", 0, "");
-                tcpSender.sendCommand("REGISTER:" + userId);
-                statusTextView.setText("등록 모드 시작: " + userId);
-                Toast.makeText(this, "📝 ECG 데이터를 측정해주세요", Toast.LENGTH_LONG).show();
+                // YES 선택 시 안정화 후 등록 모드 시작
+                startStabilizationCountdown("REGISTER", userId);
             })
             .setNegativeButton("NO", (dialog, which) -> {
                 // NO 선택 시 취소
@@ -213,31 +210,75 @@ public class MainActivity extends AppCompatActivity {
         
         // 확인 다이얼로그 표시
         String message = userId.isEmpty() 
-            ? "ECG 데이터를 받으시겠습니까?\n\n로그인을 위해 ECG 데이터를 측정합니다. (전체 검색)"
-            : "ECG 데이터를 받으시겠습니까?\n\n로그인을 위해 ECG 데이터를 측정합니다. (사용자: " + userId + ")";
+            ? "ECG 데이터를 받으시겠습니까?\n\n로그인을 위해 ECG 데이터를 측정합니다. (전체 검색)\n(5초 안정화 후 6초간 측정)"
+            : "ECG 데이터를 받으시겠습니까?\n\n로그인을 위해 ECG 데이터를 측정합니다. (사용자: " + userId + ")\n(5초 안정화 후 6초간 측정)";
         
         new AlertDialog.Builder(this)
             .setTitle("로그인 확인")
             .setMessage(message)
             .setPositiveButton("YES", (dialog, which) -> {
-                // YES 선택 시 로그인 모드 시작
-                isLoginMode = true;
-                isRegisterMode = false;
-                if (userId.isEmpty()) {
-                    showProgress("로그인", "로그인 모드 시작 중... (전체 검색)", 0, "");
-                    tcpSender.sendCommand("LOGIN");
-                } else {
-                    showProgress("로그인", "로그인 모드 시작 중... (사용자: " + userId + ")", 0, "");
-                    tcpSender.sendCommand("LOGIN:" + userId);
-                }
-                statusTextView.setText("로그인 모드 시작");
-                Toast.makeText(this, "🔐 ECG 데이터를 측정해주세요", Toast.LENGTH_LONG).show();
+                // YES 선택 시 안정화 후 로그인 모드 시작
+                startStabilizationCountdown("LOGIN", userId);
             })
             .setNegativeButton("NO", (dialog, which) -> {
                 // NO 선택 시 취소
                 dialog.dismiss();
             })
             .show();
+    }
+    
+    // 심박 안정화 카운트다운 후 데이터 수집 시작
+    private void startStabilizationCountdown(String mode, String userId) {
+        isStabilizing = true;
+        dummyDataSampleCount = 0; // 카운트 초기화
+        
+        String modeText = mode.equals("REGISTER") ? "등록" : "로그인";
+        
+        // 카운트다운 스레드
+        new Thread(() -> {
+            try {
+                for (int i = STABILIZATION_SECONDS; i > 0; i--) {
+                    final int remaining = i;
+                    handler.post(() -> {
+                        showProgress(modeText, "💓 심박 안정화 중... " + remaining + "초", 0, "편안하게 호흡하세요");
+                        statusTextView.setText("심박 안정화 중... " + remaining + "초");
+                    });
+                    Thread.sleep(1000);
+                }
+                
+                // 카운트다운 완료 - 실제 데이터 수집 시작
+                handler.post(() -> {
+                    isStabilizing = false;
+                    
+                    if (mode.equals("REGISTER")) {
+                        isRegisterMode = true;
+                        isLoginMode = false;
+                        showProgress("등록", "📊 ECG 데이터 수집 중...", 0, "");
+                        tcpSender.sendCommand("REGISTER:" + userId);
+                        statusTextView.setText("등록 데이터 수집 중: " + userId);
+                    } else {
+                        isLoginMode = true;
+                        isRegisterMode = false;
+                        if (userId.isEmpty()) {
+                            showProgress("로그인", "📊 ECG 데이터 수집 중... (전체 검색)", 0, "");
+                            tcpSender.sendCommand("LOGIN");
+                        } else {
+                            showProgress("로그인", "📊 ECG 데이터 수집 중... (사용자: " + userId + ")", 0, "");
+                            tcpSender.sendCommand("LOGIN:" + userId);
+                        }
+                        statusTextView.setText("로그인 데이터 수집 중");
+                    }
+                    Toast.makeText(MainActivity.this, "📊 데이터 수집을 시작합니다!", Toast.LENGTH_SHORT).show();
+                });
+                
+            } catch (InterruptedException e) {
+                handler.post(() -> {
+                    isStabilizing = false;
+                    hideProgress();
+                    statusTextView.setText("안정화 중단됨");
+                });
+            }
+        }).start();
     }
     
     private void doLogout() {
@@ -432,6 +473,91 @@ public class MainActivity extends AppCompatActivity {
         });
     }
     
+    // 로그인 성공 팝업 표시
+    private void showLoginSuccessDialog(String userId, double similarity) {
+        String similarityPercent = String.format("%.1f%%", similarity * 100);
+        
+        // 유사도에 따른 등급 결정
+        String grade;
+        String gradeEmoji;
+        if (similarity >= 0.95) {
+            grade = "매우 높음";
+            gradeEmoji = "🌟";
+        } else if (similarity >= 0.90) {
+            grade = "높음";
+            gradeEmoji = "⭐";
+        } else if (similarity >= 0.85) {
+            grade = "보통";
+            gradeEmoji = "✅";
+        } else {
+            grade = "낮음";
+            gradeEmoji = "⚠️";
+        }
+        
+        String message = "👤 사용자: " + userId + "\n\n" +
+                        "📊 ECG 일치율: " + similarityPercent + "\n" +
+                        gradeEmoji + " 등급: " + grade + "\n\n" +
+                        "생체 인증이 완료되었습니다.";
+        
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("🔓 로그인 성공")
+            .setMessage(message)
+            .setPositiveButton("확인", (dialog, which) -> dialog.dismiss())
+            .setIcon(android.R.drawable.ic_dialog_info)
+            .show();
+    }
+    
+    // 로그인 실패 팝업 표시
+    private void showLoginFailedDialog(String failType, double similarity, double threshold, String errorMessage) {
+        String title;
+        String message;
+        
+        if ("auth_failed".equals(failType)) {
+            // 인증 실패 (유사도 부족)
+            String similarityPercent = String.format("%.1f%%", similarity * 100);
+            String thresholdPercent = String.format("%.1f%%", threshold * 100);
+            
+            title = "🔒 로그인 실패";
+            message = "❌ ECG 인증에 실패했습니다.\n\n" +
+                     "📊 측정된 일치율: " + similarityPercent + "\n" +
+                     "🎯 필요한 일치율: " + thresholdPercent + " 이상\n\n" +
+                     "⚠️ 원인:\n" +
+                     "• 등록된 ECG 패턴과 다름\n" +
+                     "• 전극 접촉 불량\n" +
+                     "• 측정 환경 변화\n\n" +
+                     "💡 전극을 확인하고 다시 시도해주세요.";
+        } else {
+            // 기타 에러 (R-peak 부족 등)
+            title = "⚠️ 로그인 실패";
+            
+            String reason;
+            if (errorMessage.contains("R-peak") || errorMessage.contains("insufficient_peaks")) {
+                reason = "• ECG 신호에서 심박을 감지하지 못함\n" +
+                        "• 전극 접촉 상태를 확인하세요\n" +
+                        "• 새 전극 패드 사용을 권장합니다";
+            } else if (errorMessage.contains("데이터가 부족")) {
+                reason = "• 충분한 ECG 데이터가 수집되지 않음\n" +
+                        "• 측정 중 연결이 끊어졌을 수 있음";
+            } else if (errorMessage.contains("품질")) {
+                reason = "• ECG 신호 품질이 낮음\n" +
+                        "• 전극 접촉을 개선해주세요";
+            } else {
+                reason = "• " + errorMessage;
+            }
+            
+            message = "❌ ECG 처리 중 오류가 발생했습니다.\n\n" +
+                     "📋 오류 내용:\n" + reason + "\n\n" +
+                     "💡 전극 상태를 확인하고 다시 시도해주세요.";
+        }
+        
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("확인", (dialog, which) -> dialog.dismiss())
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .show();
+    }
+    
     private void updateProgress(int progress, String status) {
         handler.post(() -> {
             if (progressBar != null) {
@@ -527,8 +653,10 @@ public class MainActivity extends AppCompatActivity {
                     handler.post(() -> {
                         // "샘플 데이터 수집 완료 - 서버 처리 대기 중..." 메시지 제거
                         statusTextView.setText("✅ 로그인 완료: " + loggedInUserId + " (유사도: " + String.format("%.1f%%", similarity * 100) + ")");
-                        Toast.makeText(this, "✅ 샘플 데이터 수집 완료하였습니다. 로그인 완료!", Toast.LENGTH_LONG).show();
                         resultTextView.setText("✅ 로그인 완료\n사용자: " + loggedInUserId + "\n유사도: " + String.format("%.1f%%", similarity * 100));
+                        
+                        // 로그인 성공 팝업 표시
+                        showLoginSuccessDialog(loggedInUserId, similarity);
                     });
                     
                     updateAuthButtonState();
@@ -544,6 +672,7 @@ public class MainActivity extends AppCompatActivity {
             } 
             else if ("auth_failed".equals(status)) {
                 double bestSimilarity = json.optDouble("best_similarity", 0);
+                double threshold = json.optDouble("threshold", 0.90);
                 
                 // 로그인 모드 종료 및 더미 데이터 중지
                 isLoginMode = false;
@@ -555,8 +684,10 @@ public class MainActivity extends AppCompatActivity {
                 
                 handler.post(() -> {
                     statusTextView.setText("❌ 로그인 실패: 인증 실패 (유사도: " + String.format("%.1f%%", bestSimilarity * 100) + ")");
-                    Toast.makeText(this, "❌ 샘플 데이터 수집 완료하였습니다. 로그인 실패", Toast.LENGTH_LONG).show();
                     resultTextView.setText("❌ 로그인 실패\n인증 실패\n유사도: " + String.format("%.1f%%", bestSimilarity * 100));
+                    
+                    // 로그인 실패 팝업 표시
+                    showLoginFailedDialog("auth_failed", bestSimilarity, threshold, "ECG 패턴이 일치하지 않습니다.");
                 });
                 
                 // 3초 후 진행 상태 숨기기 (실패 메시지는 유지)
@@ -566,6 +697,51 @@ public class MainActivity extends AppCompatActivity {
                         statusTextView.setText("❌ 로그인 실패");
                     });
                 }, 3000);
+            }
+            // R-peak 부족 (insufficient_peaks)
+            else if ("insufficient_peaks".equals(status) || "low_quality".equals(status)) {
+                // 로그인/등록 모드 종료
+                if (isLoginMode) {
+                    isLoginMode = false;
+                    dummyDataSampleCount = 0;
+                    stopDummyData();
+                    
+                    showProgress("로그인", "로그인 실패 ❌", 100, "ECG 신호 품질 문제");
+                    
+                    final String errorMsg = message;
+                    handler.post(() -> {
+                        statusTextView.setText("❌ 로그인 실패: ECG 신호 품질 문제");
+                        resultTextView.setText("❌ 로그인 실패\n" + errorMsg);
+                        
+                        // 로그인 실패 팝업 표시
+                        showLoginFailedDialog("insufficient_peaks", 0, 0.90, errorMsg);
+                    });
+                    
+                    handler.postDelayed(() -> {
+                        hideProgress();
+                        handler.post(() -> statusTextView.setText("❌ 로그인 실패"));
+                    }, 3000);
+                } else if (isRegisterMode) {
+                    isRegisterMode = false;
+                    dummyDataSampleCount = 0;
+                    stopDummyData();
+                    
+                    showProgress("등록", "등록 실패 ❌", 100, "ECG 신호 품질 문제");
+                    
+                    final String errorMsg = message;
+                    handler.post(() -> {
+                        statusTextView.setText("❌ 등록 실패: ECG 신호 품질 문제");
+                        resultTextView.setText("❌ 등록 실패\n" + errorMsg);
+                        
+                        // 등록 실패 팝업 표시
+                        showLoginFailedDialog("insufficient_peaks", 0, 0.90, errorMsg);
+                    });
+                    
+                    handler.postDelayed(() -> {
+                        hideProgress();
+                        handler.post(() -> statusTextView.setText("❌ 등록 실패"));
+                    }, 3000);
+                }
             }
             // 로그아웃
             else if (message.contains("로그아웃") || "success".equals(status) && message.contains("로그아웃")) {
@@ -616,10 +792,13 @@ public class MainActivity extends AppCompatActivity {
                     // 로그인 실패 배너 표시
                     showProgress("로그인", "로그인 실패 ❌", 100, message);
                     
+                    final String errorMessage = message;
                     handler.post(() -> {
-                        statusTextView.setText("❌ 로그인 실패: " + message);
-                        Toast.makeText(this, "❌ 로그인 실패: " + message, Toast.LENGTH_LONG).show();
-                        resultTextView.setText("❌ 로그인 실패\n" + message);
+                        statusTextView.setText("❌ 로그인 실패: " + errorMessage);
+                        resultTextView.setText("❌ 로그인 실패\n" + errorMessage);
+                        
+                        // 로그인 실패 팝업 표시 (에러)
+                        showLoginFailedDialog("error", 0, 0.90, errorMessage);
                     });
                     
                     // 3초 후 진행 상태 숨기기
@@ -756,8 +935,8 @@ public class MainActivity extends AppCompatActivity {
                     addEntry(ecgValue);
                 });
                 
-                // TCP로 전송 (등록/로그인 모드일 때만)
-                if (tcpSender != null && (isRegisterMode || isLoginMode)) {
+                // TCP로 전송 (등록/로그인 모드일 때만, 안정화 완료 후)
+                if (tcpSender != null && (isRegisterMode || isLoginMode) && !isStabilizing) {
                     tcpSender.sendData(ecgValue);
                     dummyDataSampleCount++;
                     
@@ -790,10 +969,8 @@ public class MainActivity extends AppCompatActivity {
                         });
                         break;
                     }
-                } else if (tcpSender != null) {
-                    // 모드가 아니면 데이터만 전송 (진행률 업데이트 없음)
-                    tcpSender.sendData(ecgValue);
                 }
+                // 모드가 아니면 서버로 전송하지 않음 (그래프만 표시)
                 
                 // 500Hz = 2ms 간격
                 Thread.sleep(2);
@@ -935,7 +1112,7 @@ public class MainActivity extends AppCompatActivity {
         xAxis.setGridColor(0xFF1E3A5F);
         xAxis.setAxisLineColor(0xFF334155);
 
-        // Y축 스타일
+        // Y축 스타일 - 0~1024 범위 (Arduino ADC 전체 범위)
         ecgChart.getAxisLeft().setAxisMinimum(0f);
         ecgChart.getAxisLeft().setAxisMaximum(1024f);
         ecgChart.getAxisLeft().setDrawGridLines(true);
@@ -1324,8 +1501,8 @@ public class MainActivity extends AppCompatActivity {
                                 addEntry(ecgValue);
                             });
 
-                            // TCP로 전송 (등록/로그인 모드일 때만, 그리고 아직 수집 중일 때만)
-                            if (tcpSender != null && (isRegisterMode || isLoginMode) && dummyDataSampleCount < requiredSamples) {
+                            // TCP로 전송 (등록/로그인 모드일 때만, 안정화 완료 후, 아직 수집 중일 때만)
+                            if (tcpSender != null && (isRegisterMode || isLoginMode) && !isStabilizing && dummyDataSampleCount < requiredSamples) {
                                 tcpSender.sendData(ecgValue);
                                 dummyDataSampleCount++; // 블루투스 데이터도 카운트
                                 
@@ -1350,16 +1527,16 @@ public class MainActivity extends AppCompatActivity {
                                             Toast.makeText(MainActivity.this, "📊 샘플 데이터 수집 완료하였습니다. 서버 처리 중...", Toast.LENGTH_SHORT).show();
                                         }
                                     });
-                                    // 1000개 수집 완료 후 서버에 완료 신호 전송
-                                    if (tcpSender != null) {
-                                        tcpSender.sendCommand("COMPLETE");
-                                        Log.d(TAG, "블루투스 데이터 수집 완료 (" + dummyDataSampleCount + "개). 서버에 완료 신호 전송.");
-                                    }
+                                    // 수집 완료 후 서버에 완료 신호 전송 (딜레이 추가하여 마지막 데이터가 도착할 시간 확보)
+                                    handler.postDelayed(() -> {
+                                        if (tcpSender != null) {
+                                            tcpSender.sendCommand("COMPLETE");
+                                            Log.d(TAG, "블루투스 데이터 수집 완료 (" + requiredSamples + "개). 서버에 완료 신호 전송.");
+                                        }
+                                    }, 500); // 500ms 딜레이
                                 }
-                            } else if (tcpSender != null && !(isRegisterMode || isLoginMode)) {
-                                // 모드가 아니면 데이터만 전송 (진행률 업데이트 없음)
-                                tcpSender.sendData(ecgValue);
                             }
+                            // 모드가 아니면 서버로 전송하지 않음 (그래프만 표시)
                             // 등록/로그인 모드이고 이미 1000개 수집 완료했으면 전송하지 않음
                             
                             // 주기적으로 로그 출력 (5초마다)
@@ -1669,9 +1846,9 @@ public class MainActivity extends AppCompatActivity {
                 } else if ("ready".equals(status)) {
                     // 등록/로그인 준비 상태 - 데이터 수집 시작
                     String mode = json.optString("mode", "");
-                    int serverRequiredSamples = json.optInt("required_samples", 1500);
-                    // 서버에서 받은 값과 1500 중 큰 값을 사용 (최소 1500개 보장)
-                    requiredSamples = Math.max(1500, serverRequiredSamples);
+                    int serverRequiredSamples = json.optInt("required_samples", 3000);
+                    // 서버에서 받은 값과 3000 중 큰 값을 사용 (최소 3000개 보장)
+                    requiredSamples = Math.max(3000, serverRequiredSamples);
                     dummyDataSampleCount = 0; // 샘플 카운터 리셋
                     
                     // 모드 플래그 설정

@@ -31,8 +31,8 @@ class ECGSignaturePipeline:
         self.feature_extractor = FeatureExtractor(sampling_rate)
         self.signature_generator = SignatureGenerator()
         
-        # 최소 필요 샘플 수 (최소 3개의 R-peak 검출을 위해, 3초 분량)
-        self.min_samples = int(3 * sampling_rate)  # 3초 (1500 샘플)
+        # 최소 필요 샘플 수 (정확도 향상을 위해 6초 분량, 6-8개 심박)
+        self.min_samples = int(6 * sampling_rate)  # 6초 (3000 샘플)
         
     def process(self, ecg_signal: np.ndarray) -> Dict:
         """
