@@ -57,7 +57,7 @@ import org.json.JSONObject;
 public class MainActivity extends AppCompatActivity {
 
     private TcpClientSender tcpSender;
-    private final String PYTHON_SERVER_IP = "192.168.219.54";  // 여기 파이썬 서버가 열어준 IP로 변경
+    private final String PYTHON_SERVER_IP = "172.30.1.100";  // 여기 파이썬 서버가 열어준 IP로 변경
     private final int PYTHON_SERVER_PORT = 9999;
 
     private static final String TAG = "ECG_APP_CLASSIC";
