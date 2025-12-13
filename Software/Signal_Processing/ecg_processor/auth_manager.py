@@ -19,7 +19,7 @@ import uuid
 class ECGAuthManager:
     """ECG 기반 사용자 인증 관리자"""
     
-    def __init__(self, data_dir: str = None, similarity_threshold: float = 0.85):
+    def __init__(self, data_dir: str = None, similarity_threshold: float = 0.88):
         """
         Args:
             data_dir: 사용자 데이터 저장 디렉토리
@@ -437,15 +437,28 @@ class ECGAuthManager:
     
     def _euclidean_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:
         """
-        하이브리드 유사도 계산 (코사인 + 유클리드)
-        - 코사인: 패턴의 형태 비교
-        - 유클리드: 값의 실제 차이 비교
+        엄격한 하이브리드 유사도 계산
+        - 원본 값 차이 비교 (개인 특성 유지)
+        - 패턴 형태 비교
+        - 핵심 특징 가중치 적용
         """
-        # Z-score 정규화
+        # ===== 1. 원본 벡터로 절대값 차이 계산 (개인 특성 보존) =====
+        # 원본 값의 차이가 크면 다른 사람일 가능성 높음
+        abs_diff = np.abs(v1 - v2)
+        mean_abs_diff = np.mean(abs_diff)
+        
+        # 원본 값 범위 대비 차이 비율
+        value_range = max(np.max(np.abs(v1)), np.max(np.abs(v2))) + 1e-10
+        relative_diff = mean_abs_diff / value_range
+        
+        # 상대 차이가 30% 이상이면 유사도 크게 감소
+        raw_similarity = max(0, 1.0 - relative_diff * 2.0)
+        
+        # ===== 2. Z-score 정규화 후 패턴 비교 =====
         v1_normalized = (v1 - np.mean(v1)) / (np.std(v1) + 1e-10)
         v2_normalized = (v2 - np.mean(v2)) / (np.std(v2) + 1e-10)
         
-        # 1. 코사인 유사도 (패턴 형태)
+        # 코사인 유사도 (패턴 형태)
         norm1 = np.linalg.norm(v1_normalized)
         norm2 = np.linalg.norm(v2_normalized)
         if norm1 > 0 and norm2 > 0:
@@ -453,14 +466,31 @@ class ECGAuthManager:
         else:
             cosine_sim = 0.0
         
-        # 2. 유클리드 거리 기반 유사도
+        # ===== 3. 유클리드 거리 (엄격하게) =====
         distance = np.linalg.norm(v1_normalized - v2_normalized)
-        scale = 15.0  # 더 관대하게 조정 (5 → 15)
+        scale = 5.0  # 엄격하게! (15 → 5)
         euclidean_sim = 1.0 / (1.0 + distance / scale)
         
-        # 3. 하이브리드: 코사인 70% + 유클리드 30%
-        # 코사인이 더 중요하지만, 유클리드로 세부 차이 반영
-        hybrid_similarity = 0.7 * cosine_sim + 0.3 * euclidean_sim
+        # ===== 4. 핵심 특징 비교 (처음 10개 = 형태학적 특징) =====
+        # 형태학적 특징이 가장 개인 고유성이 높음
+        core_features = min(10, len(v1), len(v2))
+        if core_features > 0:
+            core_v1 = v1[:core_features]
+            core_v2 = v2[:core_features]
+            core_diff = np.mean(np.abs(core_v1 - core_v2))
+            core_range = max(np.max(np.abs(core_v1)), np.max(np.abs(core_v2))) + 1e-10
+            core_similarity = max(0, 1.0 - (core_diff / core_range) * 2.5)
+        else:
+            core_similarity = 0.0
+        
+        # ===== 5. 최종 하이브리드 (더 엄격하게) =====
+        # 원본 값 차이 30% + 코사인 25% + 유클리드 20% + 핵심특징 25%
+        hybrid_similarity = (
+            0.30 * raw_similarity +      # 원본 값 차이 (가장 중요!)
+            0.25 * cosine_sim +          # 패턴 형태
+            0.20 * euclidean_sim +       # 정규화 후 거리
+            0.25 * core_similarity       # 핵심 특징 (형태학적)
+        )
         
         return float(max(0, min(1, hybrid_similarity)))
     
